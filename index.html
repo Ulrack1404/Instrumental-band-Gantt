@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Диаграмма Ганта — кастомная сборка (fixed grid-background)</title>
+
+<!-- Frappe Gantt 1.0.4 через CDN -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@1.0.4/dist/frappe-gantt.css">
+<script src="https://cdn.jsdelivr.net/npm/frappe-gantt@1.0.4/dist/frappe-gantt.umd.js"></script>
+
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    margin: 24px;
+    background: #f5f6f8;
+    color: #2c3e50;
+  }
+  h1 { font-size: 20px; margin-bottom: 16px; }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .toolbar button {
+    padding: 6px 14px;
+    border: 1px solid #cfd6e0;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .toolbar button.active {
+    background: #4a90d9;
+    border-color: #4a90d9;
+    color: #fff;
+  }
+
+  /* контейнер: фиксированная высота + скролл, чтобы grid-background-маска работала как задумано */
+  #gantt {
+    background: #fff;
+    border-radius: 8px;
+    overflow: auto;          /* ← важно: скролл внутри контейнера */
+    min-height: 400px;
+    max-height: 725px;       /* под ваш SVG height=725 */
+    position: relative;
+  }
+
+  /* ---------- Кастомные стили SVG ---------- */
+  .gantt .grid-header { fill: #eef2f7; }
+  .gantt .grid-row { fill: #fff; }
+  .gantt .grid-row:nth-child(even) { fill: #f9fbfd; }
+
+  /* полосы задач */
+  .gantt .bar { fill: #4a90d9; rx: 5px; }
+  .gantt .bar-progress { fill: #2ecc71; rx: 5px; }
+  .gantt .bar-label { fill: #30363a; font-size: 12px; font-weight: 600; }
+
+  /* стрелки зависимостей — правим path, а не g */
+  .gantt .arrow path {
+    stroke: #e74c3c !important;
+    stroke-width: 2 !important;
+    fill: none !important;
+  }
+
+  /* линия "сегодня" */
+  .gantt .today-highlight { fill: #ffeaa7; opacity: .35; }
+
+  /* подписи шкалы */
+  .gantt .tick { stroke: #e3e8ef; }
+  .gantt .upper-text, .gantt .lower-text { fill: #5a6a7e; font-size: 12px; }
+
+  /* выходные */
+  .gantt .weekend-highlight { fill: #fdf1f1; }
+
+  /* ---------- Кастомные классы задач ---------- */
+  .bar-critical .bar { fill: #e74c3c; }
+  .bar-critical .bar-progress { fill: #c0392b; }
+
+  .bar-done .bar { fill: #95a5a6; }
+  .bar-done .bar-progress { fill: #27ae60; }
+
+  /* ---------- Кастомный попап ---------- */
+  .my-popup {
+    padding: 10px 12px;
+    min-width: 200px;
+    font-size: 13px;
+  }
+  .my-popup h3 { margin: 0 0 6px; font-size: 14px; }
+  .my-popup .row { margin: 3px 0; color: #555; }
+  .my-popup .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #4a90d9;
+    color: #fff;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<h1>План проекта — кастомная диаграмма Ганта</h1>
+
+<div class="toolbar">
+  <button data-mode="Day">День</button>
+  <button data-mode="Week" class="active">Неделя</button>
+  <button data-mode="Month">Месяц</button>
+  <button data-mode="Year">Год</button>
+</div>
+
+<div id="gantt"></div>
+
+<script>
+/* ============================================================
+   1. ЛОКАЛИЗАЦИЯ (русские месяцы и дни)
+   ============================================================ */
+const ru = {
+  month_names: ['Январь','Февраль','Март','Апрель','Май','Июнь',
+                'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
+  month_names_short: ['Янв','Фев','Мар','Апр','Май','Июн',
+                      'Июл','Авг','Сен','Окт','Ноя','Дек'],
+  day_names: ['Воскресенье','Понедельник','Вторник','Среда',
+              'Четверг','Пятница','Суббота'],
+  day_names_short: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'],
+};
+
+/* ============================================================
+   2. ЗАДАЧИ (без зависимостей — как в вашем последнем наборе)
+   ============================================================ */
+const tasks = [
+  { id: 'p1', name: 'Этап 1: Аналитика', start: '2026-10-20', end: '2026-10-30', progress: 60 },
+
+  { id: 't1', name: 'Сбор требований', start: '2026-10-20', end: '2026-10-24',
+    progress: 100, custom_class: 'bar-done' },
+
+  { id: 't2', name: 'Интервью с заказчиком', start: '2026-10-25', end: '2026-10-28',
+    progress: 50 },
+
+  { id: 't3', name: 'ТЗ (критично)', start: '2026-10-29', end: '2026-11-02',
+    progress: 20, custom_class: 'bar-critical' },
+
+  { id: 'p2', name: 'Этап 2: Дизайн', start: '2026-11-02', end: '2026-11-14', progress: 30 },
+
+  { id: 't4', name: 'Прототип', start: '2026-11-03', end: '2026-11-07',
+    progress: 100, custom_class: 'bar-done' },
+
+  { id: 't5', name: 'Вёрстка', start: '2026-11-08', end: '2026-11-12',
+    progress: 40 },
+
+  { id: 't6', name: 'Логика', start: '2026-11-13', end: '2026-11-20',
+    progress: 0 },
+
+  { id: 'p3', name: 'Этап 3: Разработка', start: '2026-11-21', end: '2026-12-10', progress: 0 },
+
+  { id: 't7', name: 'API', start: '2026-11-21', end: '2026-11-27',
+    progress: 0, custom_class: 'bar-critical' },
+
+  { id: 't8', name: 'Интеграция', start: '2026-11-28', end: '2026-12-05',
+    progress: 0 },
+
+  { id: 't9', name: 'Тестирование', start: '2026-12-06', end: '2026-12-10',
+    progress: 0, custom_class: 'bar-critical' },
+
+  { id: 'p4', name: 'Этап 4: Запуск', start: '2026-12-11', end: '2026-12-20', progress: 0 },
+
+  { id: 't10', name: 'Документация', start: '2026-12-11', end: '2026-12-15',
+    progress: 0 },
+
+  { id: 't11', name: 'Релиз', start: '2026-12-18', end: '2026-12-20',
+    progress: 0, custom_class: 'bar-critical' },
+];
+
+/* ============================================================
+   3. ИНИЦИАЛИЗАЦИЯ
+   ============================================================ */
+const gantt = new Gantt('#gantt', tasks, {
+  view_mode: 'Week',
+  language: ru,
+
+  column_width: 70,
+  bar_height: 22,
+  bar_corner_radius: 5,
+  padding: 20,
+
+  lines: 'both',
+
+  readonly: false,
+  auto_move_label: true,
+
+  custom_popup_html: (task) => `
+    <div class="my-popup">
+      <h3>${task.name}</h3>
+      <div class="row"><span class="badge">${task.progress ?? 0}%</span></div>
+      <div class="row">📅 ${task.start} → ${task.end}</div>
+      ${task.dependencies ? `<div class="row">🔗 Зависит от: ${task.dependencies}</div>` : ''}
+    </div>`,
+
+  on_click: (task) => console.log('Клик по задаче:', task.id, task.name),
+
+  on_date_change: (task, start, end) => {
+    console.log('Даты изменены:', task.id, start, end);
+  },
+
+  on_progress_change: (task, progress) => {
+    console.log('Прогресс изменён:', task.id, progress + '%');
+  },
+
+  on_view_change: (mode) => {
+    document.querySelectorAll('.toolbar button').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    // после смены режима — снова переставить фон
+    requestAnimationFrame(fixGridBackground);
+  },
+});
+
+/* ============================================================
+   4. ФИКС: grid-background всегда первым в SVG
+   ------------------------------------------------------------
+   Причина: в 1.0.4 grid-background вставляется ПОСЛЕДНИМ и белым
+   прямоугольником перекрывает полосы задач. При скролле Gantt
+   перерисовывает SVG — фон снова оказывается сверху.
+   Решение: после любой мутации DOM в <svg> — переставляем фон
+   в начало (под всё остальное).
+   ============================================================ */
+function fixGridBackground() {
+  const svg = document.querySelector('#gantt svg.gantt');
+  if (!svg) return;
+  const bg = svg.querySelector(':scope > .grid-background');
+  if (bg && svg.firstElementChild !== bg) {
+    svg.insertBefore(bg, svg.firstChild);
+  }
+}
+
+/* Первичная установка (на случай, если MutationObserver не успел) */
+fixGridBackground();
+
+/* Наблюдаем за изменениями внутри <svg> (скролл, смена режима, ресайз) */
+(function observeSvg() {
+  const host = document.querySelector('#gantt');
+  if (!host) return;
+
+  let svgEl = host.querySelector('svg.gantt');
+
+  const attach = (svg) => {
+    if (!svg) return;
+    // не навешиваем повторно
+    if (svg.__bgObserverAttached) return;
+    svg.__bgObserverAttached = true;
+
+    const obs = new MutationObserver(() => {
+      // переставляем синхронно в микротаске, чтобы не зациклиться
+      const bg = svg.querySelector(':scope > .grid-background');
+      if (bg && svg.firstElementChild !== bg) {
+        svg.insertBefore(bg, svg.firstChild);
+      }
+    });
+    obs.observe(svg, { childList: true, subtree: false });
+  };
+
+  attach(svgEl);
+
+  // Если Gantt пересоздаст <svg> (бывает при некоторых change_view_mode) —
+  // ловим это на уровне контейнера.
+  const hostObs = new MutationObserver(() => {
+    const cur = host.querySelector('svg.gantt');
+    if (cur && cur !== svgEl) {
+      svgEl = cur;
+      attach(svgEl);
+      fixGridBackground();
+    }
+  });
+  hostObs.observe(host, { childList: true, subtree: false });
+})();
+
+/* Дополнительно: страховка на скролл контейнера (некоторые сборки
+   перерисовывают содержимое без childList-мутаций верхнего уровня) */
+document.querySelector('#gantt').addEventListener('scroll', () => {
+  requestAnimationFrame(fixGridBackground);
+}, { passive: true });
+
+/* И на ресайз окна */
+window.addEventListener('resize', () => {
+  requestAnimationFrame(fixGridBackground);
+});
+
+/* ============================================================
+   5. ТУЛБАР — переключение масштаба
+   ============================================================ */
+document.querySelectorAll('.toolbar button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.mode;   // Day | Week | Month | Year
+    gantt.change_view_mode(mode);
+    // change_view_mode перерисовывает SVG — вернём фон в начало
+    requestAnimationFrame(fixGridBackground);
+    setTimeout(fixGridBackground, 50);   // страховка на анимации
+  });
+});
+</script>
+
+</body>
+</html> 

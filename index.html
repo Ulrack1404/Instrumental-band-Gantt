@@ -314,41 +314,6 @@ document.querySelectorAll('.toolbar button').forEach(btn => {
   });
 });
 
-/* ============================================================
-   6. ПЕРЕХВАТ ПОПАПА (обход бага 1.0.4: custom_popup_html
-      читается, но не рендерится — заменяем дефолтный попап)
-   ============================================================ */
-(function patchPopup() {
-  const body = document.body;
-  if (!body) return;
-
-  const observer = new MutationObserver(() => {
-    const wrapper = document.querySelector('.popup-wrapper');
-    if (!wrapper) return;
-    if (wrapper.dataset.patched === '1') return;
-
-    // определяем задачу по заголовку дефолтного попапа
-    const titleEl = wrapper.querySelector('.title');
-    if (!titleEl) return;
-
-    const taskName = titleEl.textContent.trim();
-    const task = tasks.find(t => t.name === taskName);
-    if (!task) return;
-
-    // заменяем содержимое на наш шаблон
-    wrapper.innerHTML = `
-      <div class="my-popup">
-        <h3>${task.name}</h3>
-        <div class="row"><span class="badge">${task.progress ?? 0}%</span></div>
-        <div class="row">📅 ${formatRuDate(task.start)} — ${formatRuDate(task.end)}</div>
-        ${task.dependencies ? `<div class="row">🔗 Зависит от: ${task.dependencies}</div>` : ''}
-      </div>`;
-
-    wrapper.dataset.patched = '1';
-  });
-
-  observer.observe(body, { childList: true, subtree: true });
-})(); 
 </script>
 
 </body>

@@ -45,6 +45,9 @@
     min-height: 400px;
     max-height: 725px;
     position: relative;
+
+    /* выходные в недельном режиме — заметнее (1.0.4: класс .holiday-highlight) */
+    --g-weekend-highlight-color: #fff2ee;
   }
 
   /* ---------- Кастомные стили SVG ---------- */
@@ -83,8 +86,9 @@
   .gantt .tick { stroke: #e3e8ef; }
   .gantt .upper-text, .gantt .lower-text { fill: #5a6a7e; font-size: 12px; }
 
-  /* выходные */
-  .gantt .weekend-highlight { fill: #fdf1f1; }
+  /* выходные: в 1.0.4 класс .holiday-highlight, inline fill через переменную.
+     !important нужен, чтобы перебить inline style="fill: var(...)" */
+  .gantt .holiday-highlight { fill: var(--g-weekend-highlight-color) !important; }
 
   /* ---------- Кастомные классы задач ---------- */
   .gantt .bar-wrapper.bar-critical .bar          { fill: #f5c6c6; }
@@ -92,10 +96,6 @@
 
   .gantt .bar-wrapper.bar-done .bar              { fill: #e0e0e0; }
   .gantt .bar-wrapper.bar-done .bar-progress     { fill: #27ae60; }
-
-  #gantt {
-  --g-weekend-highlight-color: #fff2ee;   /* было ~#fdf1f1 */ 
-} 
 
   /* ---------- Кастомный попап ---------- */
   .my-popup {
@@ -141,6 +141,25 @@ const ru = {
               'Четверг','Пятница','Суббота'],
   day_names_short: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'],
 };
+
+/* ============================================================
+   1b. ФОРМАТИРОВАНИЕ ДАТ ДЛЯ ПОПАПА
+   ------------------------------------------------------------
+   '2026-10-19' → '19 октября'
+   Поддерживает также Date и строки с временем.
+   ============================================================ */
+const MONTHS_GEN = ['января','февраля','марта','апреля','мая','июня',
+                    'июля','августа','сентября','октября','ноября','декабря'];
+
+function formatRuDate(iso, withYear = false) {
+  if (!iso) return '';
+  const d = (iso instanceof Date)
+    ? iso
+    : new Date(String(iso).slice(0, 10) + 'T00:00:00');
+  if (isNaN(d)) return String(iso);
+  const base = `${d.getDate()} ${MONTHS_GEN[d.getMonth()]}`;
+  return withYear ? `${base} ${d.getFullYear()}` : base;
+}
 
 /* ============================================================
    2. ЗАДАЧИ
@@ -261,7 +280,7 @@ const gantt = new Gantt('#gantt', tasks, {
     <div class="my-popup">
       <h3>${task.name}</h3>
       <div class="row"><span class="badge">${task.progress ?? 0}%</span></div>
-      <div class="row">📅 ${task.start} → ${task.end}</div>
+      <div class="row">📅 ${formatRuDate(task.start)} — ${formatRuDate(task.end)}</div>
       ${task.dependencies ? `<div class="row">🔗 Зависит от: ${task.dependencies}</div>` : ''}
     </div>`,
 
@@ -294,7 +313,43 @@ document.querySelectorAll('.toolbar button').forEach(btn => {
     setTimeout(stabilize.schedule, 120);
   });
 });
+
+/* ============================================================
+   6. ПЕРЕХВАТ ПОПАПА (обход бага 1.0.4: custom_popup_html
+      читается, но не рендерится — заменяем дефолтный попап)
+   ============================================================ */
+(function patchPopup() {
+  const body = document.body;
+  if (!body) return;
+
+  const observer = new MutationObserver(() => {
+    const wrapper = document.querySelector('.popup-wrapper');
+    if (!wrapper) return;
+    if (wrapper.dataset.patched === '1') return;
+
+    // определяем задачу по заголовку дефолтного попапа
+    const titleEl = wrapper.querySelector('.title');
+    if (!titleEl) return;
+
+    const taskName = titleEl.textContent.trim();
+    const task = tasks.find(t => t.name === taskName);
+    if (!task) return;
+
+    // заменяем содержимое на наш шаблон
+    wrapper.innerHTML = `
+      <div class="my-popup">
+        <h3>${task.name}</h3>
+        <div class="row"><span class="badge">${task.progress ?? 0}%</span></div>
+        <div class="row">📅 ${formatRuDate(task.start)} — ${formatRuDate(task.end)}</div>
+        ${task.dependencies ? `<div class="row">🔗 Зависит от: ${task.dependencies}</div>` : ''}
+      </div>`;
+
+    wrapper.dataset.patched = '1';
+  });
+
+  observer.observe(body, { childList: true, subtree: true });
+})(); 
 </script>
 
 </body>
-</html>   
+</html> 

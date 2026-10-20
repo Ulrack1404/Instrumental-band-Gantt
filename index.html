@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>Развитие инструментального бенда (Диаграмма Ганта)</title>
 
-<!-- Frappe Gantt 1.0.4 через CDN -->
+<!-- Frappe Gantt 1.0.4 через CDN (UMD — стабильное подключение) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@1.0.4/dist/frappe-gantt.css">
 <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@1.0.4/dist/frappe-gantt.umd.js"></script>
 
@@ -37,13 +37,13 @@
     color: #fff;
   }
 
-  /* контейнер: фиксированная высота + скролл, чтобы grid-background-маска работала как задумано */
+  /* контейнер: фиксированная высота + скролл */
   #gantt {
     background: #fff;
     border-radius: 8px;
-    overflow: auto;          /* ← важно: скролл внутри контейнера */
+    overflow: auto;
     min-height: 400px;
-    max-height: 725px;       /* под ваш SVG height=725 */
+    max-height: 725px;
     position: relative;
   }
 
@@ -52,13 +52,21 @@
   .gantt .grid-row { fill: #fff; }
   .gantt .grid-row:nth-child(even) { fill: #f9fbfd; }
 
-  /* полосы задач */
-  .gantt .bar { fill: #4a90d9; rx: 5px; }
-  .gantt .bar-progress { fill: #2ecc71; rx: 5px; }
-  .gantt .bar-label { fill: #30363a; font-size: 12px; font-weight: 600; }
+  /* полосы задач: невыполненная часть (светлая) и прогресс (насыщенный).
+     Селектор .bar-wrapper .bar — та же специфичность, что у библиотеки,
+     поэтому перебиваем её без !important. */
+  .gantt .bar-wrapper .bar          { fill: #b2d3f6; }
+  .gantt .bar-wrapper .bar-progress { fill: #2ecc71; }
 
-  .gantt .bar-wrapper .bar {
-    fill: #b2d3f6; 
+  /* подписи на полосах */
+  .gantt .bar-label {
+    fill: #30363a;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  /* текст, вынесенный наружу полосы — тёмный, чтобы не сливаться с фоном */
+  .gantt .bar-label.big {
+    fill: #2c3e50 !important;
   }
 
   /* стрелки зависимостей — правим path, а не g */
@@ -79,11 +87,11 @@
   .gantt .weekend-highlight { fill: #fdf1f1; }
 
   /* ---------- Кастомные классы задач ---------- */
-  .bar-critical .bar { fill: #e74c3c; }
-  .bar-critical .bar-progress { fill: #c0392b; }
+  .gantt .bar-wrapper.bar-critical .bar          { fill: #f5c6c6; }
+  .gantt .bar-wrapper.bar-critical .bar-progress { fill: #e74c3c; }
 
-  .bar-done .bar { fill: #95a5a6; }
-  .bar-done .bar-progress { fill: #27ae60; }
+  .gantt .bar-wrapper.bar-done .bar              { fill: #e0e0e0; }
+  .gantt .bar-wrapper.bar-done .bar-progress     { fill: #27ae60; }
 
   /* ---------- Кастомный попап ---------- */
   .my-popup {
@@ -118,7 +126,7 @@
 
 <script>
 /* ============================================================
-   1. ЛОКАЛИЗАЦИЯ (русские месяцы и дни)
+   1. ЛОКАЛИЗАЦИЯ
    ============================================================ */
 const ru = {
   month_names: ['Январь','Февраль','Март','Апрель','Май','Июнь',
@@ -131,41 +139,109 @@ const ru = {
 };
 
 /* ============================================================
-   2. ЗАДАЧИ (без зависимостей — как в вашем последнем наборе)
+   2. ЗАДАЧИ
    ============================================================ */
 const tasks = [
-  { id: 't1', name: 'Все плейбеки готовы', start: '2026-10-19', end: '2026-12-01', progress: 50, custom_class: 'bar-progress' },
-
-  { id: 't2', name: 'Все партии наиграны', start: '2026-10-19', end: '2026-12-15',
-    progress: 40, custom_class: 'bar-progress' },
-
-  { id: 't3', name: 'Все песни отрепетированы', start: '2026-10-19', end: '2026-12-31',
-    progress: 30 },
-
+  { id: 't1', name: 'Все плейбеки готовы', start: '2026-10-19', end: '2026-12-01', progress: 50 },
+  { id: 't2', name: 'Все партии наиграны', start: '2026-10-19', end: '2026-12-15', progress: 40 },
+  { id: 't3', name: 'Все песни отрепетированы', start: '2026-10-19', end: '2026-12-31', progress: 30 },
   { id: 't4', name: 'Новый микшер используется', start: '2026-10-19', end: '2026-12-01',
     progress: 0, custom_class: 'bar-critical' },
-
   { id: 't5', name: 'Продуман разговор с залом между песнями', start: '2026-10-19', end: '2026-12-01', progress: 0 },
-
-  { id: 't6', name: 'Сделана фотосессия', start: '2026-10-19', end: '2026-12-31',
-    progress: 0 },
-
-  { id: 't7', name: 'Создана группа в VK', start: '2026-10-19', end: '2026-12-31',
-    progress: 0 },
-
-  { id: 't8', name: 'Записаны аудио-плюсы для публикации', start: '2026-12-01', end: '2026-12-31',
-    progress: 0 },
-
+  { id: 't6', name: 'Сделана фотосессия', start: '2026-10-19', end: '2026-12-31', progress: 0 },
+  { id: 't7', name: 'Создана группа в VK', start: '2026-10-19', end: '2026-12-31', progress: 0 },
+  { id: 't8', name: 'Записаны аудио-плюсы для публикации', start: '2026-12-01', end: '2026-12-31', progress: 0 },
   { id: 't9', name: 'Записаны видео для публикации', start: '2026-12-01', end: '2026-12-31', progress: 0 },
- 
 ];
 
 /* ============================================================
-   3. ИНИЦИАЛИЗАЦИЯ
+   3. СТАБИЛИЗИРУЮЩИЙ МОДУЛЬ
+   ------------------------------------------------------------
+   Объявлен ДО new Gantt, потому что конструктор синхронно
+   вызывает on_view_change, а тот зовёт stabilize.schedule().
+   Делает две вещи, БЕЗ зацикливания и БЕЗ конкуренции:
+     a) grid-background всегда первым в <svg> (баг 1.0.4 —
+        фон рисуется поверх задач);
+     b) подписи недель начинаются с понедельника (в 1.0.4
+        week_start игнорируется).
+   ============================================================ */
+const stabilize = (() => {
+  const host = document.querySelector('#gantt');
+  if (!host) return { schedule: () => {} };
+
+  const pad = n => String(n).padStart(2, '0');
+  let rafId = null;
+
+  function fixGridBackground() {
+    const svg = host.querySelector('svg.gantt');
+    if (!svg) return;
+    const bg = svg.querySelector(':scope > .grid-background');
+    // мутация ТОЛЬКО если фон реально не первый
+    if (bg && svg.firstElementChild !== bg) {
+      svg.insertBefore(bg, svg.firstChild);
+    }
+  }
+
+  function patchWeekLabels() {
+    const svg = host.querySelector('svg.gantt');
+    if (!svg) return;
+
+    svg.querySelectorAll('.lower-text[class*="date_"]').forEach(el => {
+      const m = el.className.match(/date_(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return;
+
+      // локальная дата из класса (без UTC-сдвига)
+      const d = new Date(+m[1], +m[2] - 1, +m[3]);
+      // сдвиг к понедельнику этой недели: 0=Пн, 6=Вс
+      const shift = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() - shift);
+
+      const end = new Date(d);
+      end.setDate(d.getDate() + 6);
+
+      const newText = `${pad(d.getDate())} - ${pad(end.getDate())}`;
+      const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const newClass = el.className.replace(/date_\d{4}-\d{2}-\d{2}/, 'date_' + iso);
+
+      // пишем в DOM только при реальном изменении — иначе цикл мутаций
+      if (el.textContent !== newText) el.textContent = newText;
+      if (el.className !== newClass)  el.className  = newClass;
+    });
+  }
+
+  function run() {
+    rafId = null;
+    fixGridBackground();
+    patchWeekLabels();
+  }
+
+  function schedule() {
+    if (rafId) return;                 // уже запланировано на этот кадр
+    rafId = requestAnimationFrame(run);
+  }
+
+  // один наблюдатель на контейнер (покрывает и замену <svg>)
+  new MutationObserver(schedule).observe(host, { childList: true, subtree: true });
+
+  // скролл и ресайз — без дублей
+  host.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+
+  // первый прогон
+  schedule();
+
+  return { schedule };
+})();
+
+/* ============================================================
+   4. ИНИЦИАЛИЗАЦИЯ GANTT
+   ------------------------------------------------------------
+   on_view_change теперь безопасно зовёт stabilize.schedule().
    ============================================================ */
 const gantt = new Gantt('#gantt', tasks, {
   view_mode: 'Week',
   language: ru,
+  // week_start: 1 — в 1.0.4 игнорируется, понедельник делаем патчем выше
 
   column_width: 70,
   bar_height: 22,
@@ -199,79 +275,8 @@ const gantt = new Gantt('#gantt', tasks, {
     document.querySelectorAll('.toolbar button').forEach(b => {
       b.classList.toggle('active', b.dataset.mode === mode);
     });
-    // после смены режима — снова переставить фон
-    requestAnimationFrame(fixGridBackground);
+    stabilize.schedule();
   },
-});
-
-/* ============================================================
-   4. ФИКС: grid-background всегда первым в SVG
-   ------------------------------------------------------------
-   Причина: в 1.0.4 grid-background вставляется ПОСЛЕДНИМ и белым
-   прямоугольником перекрывает полосы задач. При скролле Gantt
-   перерисовывает SVG — фон снова оказывается сверху.
-   Решение: после любой мутации DOM в <svg> — переставляем фон
-   в начало (под всё остальное).
-   ============================================================ */
-function fixGridBackground() {
-  const svg = document.querySelector('#gantt svg.gantt');
-  if (!svg) return;
-  const bg = svg.querySelector(':scope > .grid-background');
-  if (bg && svg.firstElementChild !== bg) {
-    svg.insertBefore(bg, svg.firstChild);
-  }
-}
-
-/* Первичная установка (на случай, если MutationObserver не успел) */
-fixGridBackground();
-
-/* Наблюдаем за изменениями внутри <svg> (скролл, смена режима, ресайз) */
-(function observeSvg() {
-  const host = document.querySelector('#gantt');
-  if (!host) return;
-
-  let svgEl = host.querySelector('svg.gantt');
-
-  const attach = (svg) => {
-    if (!svg) return;
-    // не навешиваем повторно
-    if (svg.__bgObserverAttached) return;
-    svg.__bgObserverAttached = true;
-
-    const obs = new MutationObserver(() => {
-      // переставляем синхронно в микротаске, чтобы не зациклиться
-      const bg = svg.querySelector(':scope > .grid-background');
-      if (bg && svg.firstElementChild !== bg) {
-        svg.insertBefore(bg, svg.firstChild);
-      }
-    });
-    obs.observe(svg, { childList: true, subtree: false });
-  };
-
-  attach(svgEl);
-
-  // Если Gantt пересоздаст <svg> (бывает при некоторых change_view_mode) —
-  // ловим это на уровне контейнера.
-  const hostObs = new MutationObserver(() => {
-    const cur = host.querySelector('svg.gantt');
-    if (cur && cur !== svgEl) {
-      svgEl = cur;
-      attach(svgEl);
-      fixGridBackground();
-    }
-  });
-  hostObs.observe(host, { childList: true, subtree: false });
-})();
-
-/* Дополнительно: страховка на скролл контейнера (некоторые сборки
-   перерисовывают содержимое без childList-мутаций верхнего уровня) */
-document.querySelector('#gantt').addEventListener('scroll', () => {
-  requestAnimationFrame(fixGridBackground);
-}, { passive: true });
-
-/* И на ресайз окна */
-window.addEventListener('resize', () => {
-  requestAnimationFrame(fixGridBackground);
 });
 
 /* ============================================================
@@ -279,14 +284,13 @@ window.addEventListener('resize', () => {
    ============================================================ */
 document.querySelectorAll('.toolbar button').forEach(btn => {
   btn.addEventListener('click', () => {
-    const mode = btn.dataset.mode;   // Day | Week | Month | Year
-    gantt.change_view_mode(mode);
-    // change_view_mode перерисовывает SVG — вернём фон в начало
-    requestAnimationFrame(fixGridBackground);
-    setTimeout(fixGridBackground, 50);   // страховка на анимации
+    gantt.change_view_mode(btn.dataset.mode);
+    stabilize.schedule();
+    // один страховочный проход после анимации Gantt (0.4s)
+    setTimeout(stabilize.schedule, 120);
   });
 });
 </script>
 
 </body>
-</html> 
+</html>  
